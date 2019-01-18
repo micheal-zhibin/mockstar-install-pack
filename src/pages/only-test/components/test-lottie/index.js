@@ -8,7 +8,9 @@ export default class TestLottie extends Component {
         super(props, context);
 
         this.state = {
-            list: []
+            list: [],
+            time: 0,
+            total: 1000
         };
     }
 
@@ -34,38 +36,49 @@ export default class TestLottie extends Component {
 
     handleClickMulti = () => {
 
-        this.tryManyTimes();
+        this.tryManyTimes(0, 1000);
     };
 
     tryManyTimes() {
-        let i = 0;
-        let checkT;
-
-        checkT = setInterval(() => {
-            if (i > 10) {
-                clearInterval(checkT);
-                return;
+        const { time, total } = this.state;
+        const that = this;
+        const fs = window.require('fs');
+        Promise.all(this.makeRequest(time)).then((result) => {
+            result.forEach((item, index) => {
+                // fs.writeFileSync(`result/times_${time}_blob_${index+1}.json`, JSON.stringify(item.performance))
+            })
+            if (time < total) {
+                this.setState({
+                    time: time + 1,
+                });
+                that.tryManyTimes(time+1, total);
+            } else {
+                alert('finish')
             }
-
-            i++;
-
-            this.requestOnce();
         });
     }
 
-    requestOnce() {
-        this.getData('http://now.qq.com/demo/lottie/index.html?now_n_http=1&blob=1', false)
-            .then((data) => {
-                const jsonList = data.performance;
-                const { list } = this.state;
+    makeRequest(times) {
+        const requestArr = [];
+        for (let i = 1; i <= 7; i ++) {
+            requestArr.push(this.requestOnce(i, times));
+        }
+        return requestArr;
+    }
 
-                this.setState({
-                    list: [...list, ...jsonList]
-                });
-            })
-            .catch((err) => {
-                console.error(err);
-            });
+    requestOnce(blobNum = 1, times) {
+        return this.getData(`https://now.qq.com/demo/lottie/index.html?blob=${blobNum}`, false)
+            // .then((data) => {
+            //     const jsonList = data.performance;
+            //     const { list } = this.state;
+
+            //     this.setState({
+            //         list: [...list, ...jsonList]
+            //     });
+            // })
+            // .catch((err) => {
+            //     console.error(err);
+            // });
     }
 
     getData(url, isShow) {
@@ -107,11 +120,16 @@ export default class TestLottie extends Component {
                 this.checkIfBlobReady(win)
                     .then(() => {
                         win.webContents.executeJavaScript('window._loadPerformanceStr', (result) => {
-                            console.log('-==-==222=====', typeof result, result);
+                            // console.log('-==-==222=====', typeof result, result);
                             retData.performance = JSON.parse(result);
-
+                            if (!win.isDestroyed()) {
+                                win.destroy();
+                            }
                             resolve(retData);
                         });
+                    })
+                    .catch((err) => {
+                        console.log('-------------catch err', err);
                     });
 
             });
@@ -119,13 +137,21 @@ export default class TestLottie extends Component {
     }
 
     checkIfBlobReady(win) {
-
+        let count = 0;
         return new Promise((resolve, reject) => {
             let checkT;
 
             checkT = setInterval(() => {
+                if (count > 50) {
+                    // !win.isDestroyed() && win.destroy();
+                    clearInterval(checkT);
+                    return resolve({});
+                }
+                count ++;
                 win.webContents.executeJavaScript('document.querySelectorAll(\'#bodymovin > div\').length', (result) => {
                     if (result > 0) {
+                        // console.log(win.isDestroyed())
+                        // !win.isDestroyed() && win.destroy();
                         clearInterval(checkT);
                         resolve(result);
                     }
@@ -169,6 +195,8 @@ export default class TestLottie extends Component {
                 <Button onClick={this.handleClickMulti}>测试打开3次 www.qq.com</Button>
 
                 <Divider />
+
+                <div>{`${this.state.time} / ${this.state.total}`}</div>
 
                 <Table
                     rowKey="requestStart"
